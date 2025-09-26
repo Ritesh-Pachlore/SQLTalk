@@ -1,34 +1,21 @@
-import time
-import streamlit as st
 import google.generativeai as genai
+from typing import Optional
 
-def get_gemini_response(question, prompt):
+def get_gemini_response(question: str, prompt: str) -> Optional[str]:
     """
-    Get response from Gemini API with retry mechanism.
-    
-    Args:
-        question (str): The user's question
-        prompt (str): The system prompt/context
-    
-    Returns:
-        str: Generated SQL query or None if failed
+    Get SQL query from Gemini based on natural language question
     """
-    max_retries = 2
-    retry_count = 0
-    
-    while retry_count < max_retries:
-        try:
-            model = genai.GenerativeModel('gemini-2.5-flash')  # Using a faster model
-            response = model.generate_content(prompt + "\n" + question)
-            return response.text
-        except Exception as e:
-            if "429" in str(e) and retry_count < max_retries - 1:  # Rate limit error
-                retry_count += 1
-                wait_time = 5  # Start with a 5 second wait
-                st.warning(f"Rate limit reached. Waiting {wait_time} seconds... (Attempt {retry_count}/{max_retries})")
-                time.sleep(wait_time)
-                continue
-            else:
-                st.error(f"An error occurred: {str(e)}")
-                return None
-    return None
+    try:
+        model = genai.GenerativeModel('gemini-2.5-flash')  # Using a faster model
+        full_prompt = f"{prompt}\n\nQuestion: {question}\nSQL Query:"
+        response = model.generate_content(full_prompt)
+        
+        # Clean the response
+        sql_query = response.text.strip()
+        # Remove any markdown formatting if present
+        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+        
+        return sql_query
+    except Exception as e:
+        print(f"Error generating SQL: {str(e)}")
+        return None

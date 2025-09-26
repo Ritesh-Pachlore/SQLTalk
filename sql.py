@@ -44,16 +44,38 @@ def get_gemini_response(question,prompt):
 
 ## Fucntion To retrieve query from the database
 
-def read_sql_query(sql,db):
-    conn=sqlite3.connect(db)
-    cur=conn.cursor()
-    cur.execute(sql)
-    rows=cur.fetchall()
-    conn.commit()
-    conn.close()    
-    for row in rows:
-       print(row)
-    return rows
+def read_sql_query(sql, db):
+    try:
+        conn = sqlite3.connect(db)
+        cur = conn.cursor()
+        
+        # Get column names
+        cur.execute(sql)
+        columns = [description[0] for description in cur.description]
+        rows = cur.fetchall()
+        conn.commit()
+        conn.close()
+        
+        return {
+            "columns": columns,
+            "rows": rows,
+            "success": True,
+            "message": f"Successfully retrieved {len(rows)} records"
+        }
+    except sqlite3.Error as e:
+        return {
+            "success": False,
+            "message": f"Database error: {str(e)}",
+            "columns": [],
+            "rows": []
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"An error occurred: {str(e)}",
+            "columns": [],
+            "rows": []
+        }
 
    
 ## Define Your Prompt
@@ -74,16 +96,55 @@ also the sql code should not have ``` in beginning or end and sql word in output
 
 ## Streamlit App
 
-st.set_page_config(page_title="I can Retrieve Any SQL query")
-st.header("Gemini App To Retrieve SQL Data")
+st.set_page_config(
+    page_title="SQLTalk - Natural Language to SQL",
+    page_icon="🗣️",
+    layout="wide"
+)
+
+st.title("💬 SQLTalk")
+st.subheader("Ask questions about your data in plain English")
+
+# Add helpful instructions
+st.markdown("""
+### How to use SQLTalk:
+1. Type your question in natural language
+2. Click 'Ask the question' button
+3. View the generated SQL and results
+
+#### Available Data:
+The database contains student information with these columns:
+- NAME: Student's name
+- CLASS: Course name (e.g., Data Science, DEVOPS)
+- SECTION: Class section (A or B)
+- MARKS: Student's marks
+
+#### Example Questions:
+- Show all students in Data Science class
+- How many students scored above 80 marks?
+- List students in section A
+""")
 
 # Initialize session state
 if "input" not in st.session_state:
     st.session_state.input = ""
 
-question = st.text_input("Input: ", key="input", value=st.session_state.input)
+# Create a clean input section
+st.markdown("### 🔍 Ask your question")
+question = st.text_input(
+    "Type your question in plain English",
+    key="input",
+    value=st.session_state.input,
+    placeholder="e.g., Show all students in Data Science class"
+)
 
-submit=st.button("Ask the question")
+# Add some spacing
+st.markdown("")
+
+# Create a centered button with custom styling
+col1, col2, col3 = st.columns([1,1,1])
+with col2:
+    submit = st.button("🔎 Ask the question", use_container_width=True)
 
 # if submit is clicked
 
@@ -91,15 +152,39 @@ if submit:
     with st.spinner('Generating SQL query...'):
         response = get_gemini_response(question, prompt)
         if response:
-            try:
-                sql_response = read_sql_query(response, "student.db")
-                st.subheader("The Response is")
-                for row in sql_response:
-                    print(row)
-                    st.header(row)
-            except Exception as e:
-                st.error(f"Error executing SQL query: {str(e)}")
-                st.code(response, language="sql")
+            # Show the generated SQL query
+            st.subheader("Generated SQL Query:")
+            st.code(response, language="sql")
+            
+            # Execute the query
+            sql_response = read_sql_query(response, "student.db")
+            
+            if sql_response["success"]:
+                st.success(sql_response["message"])
+                
+                # If we have data to display
+                if sql_response["rows"]:
+                    # Create a formatted table
+                    st.subheader("Query Results:")
+                    
+                    # Convert the data to a format suitable for st.table
+                    table_data = []
+                    for row in sql_response["rows"]:
+                        row_dict = {}
+                        for col, val in zip(sql_response["columns"], row):
+                            row_dict[col] = val
+                        table_data.append(row_dict)
+                    
+                    # Display as an interactive table
+                    st.dataframe(
+                        table_data,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                else:
+                    st.info("Query executed successfully but returned no results.")
+            else:
+                st.error(sql_response["message"])
 
 
 

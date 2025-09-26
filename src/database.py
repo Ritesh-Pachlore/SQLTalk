@@ -1,58 +1,52 @@
 import sqlite3
+from typing import List, Tuple, Any
+import pandas as pd
 
-def read_sql_query(sql, db):
+def read_sql_query(sql: str, db: str) -> List[Tuple[Any, ...]]:
     """
-    Execute a SQL query and return the results.
-    
-    Args:
-        sql (str): SQL query to execute
-        db (str): Path to the SQLite database file
-    
-    Returns:
-        list: Query results as a list of tuples
+    Execute SQL query and return results
     """
     conn = sqlite3.connect(db)
     cur = conn.cursor()
-    cur.execute(sql)
-    rows = cur.fetchall()
-    conn.commit()
-    conn.close()    
-    return rows
+    try:
+        cur.execute(sql)
+        rows = cur.fetchall()
+        return rows
+    except Exception as e:
+        raise e
+    finally:
+        conn.close()
 
-def init_database(db_path):
+def get_query_results_with_columns(sql: str, db: str) -> Tuple[List[str], List[Tuple[Any, ...]]]:
     """
-    Initialize the database with the STUDENT table if it doesn't exist.
-    
-    Args:
-        db_path (str): Path where the database should be created
+    Execute SQL query and return results with column names
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # Create the STUDENT table if it doesn't exist
-    table_info = """
-    CREATE TABLE IF NOT EXISTS STUDENT(
-        NAME VARCHAR(25),
-        CLASS VARCHAR(25),
-        SECTION VARCHAR(25),
-        MARKS INT
-    );
+    conn = sqlite3.connect(db)
+    cur = conn.cursor()
+    try:
+        cur.execute(sql)
+        columns = [description[0] for description in cur.description] if cur.description else []
+        rows = cur.fetchall()
+        return columns, rows
+    except Exception as e:
+        raise e
+    finally:
+        conn.close()
+
+def validate_sql_query(sql: str) -> bool:
     """
-    cursor.execute(table_info)
+    Basic SQL query validation
+    """
+    # Prevent dangerous operations
+    dangerous_keywords = ['DROP', 'DELETE', 'TRUNCATE', 'ALTER', 'CREATE', 'INSERT', 'UPDATE']
+    sql_upper = sql.upper()
     
-    # Check if the table is empty
-    cursor.execute("SELECT COUNT(*) FROM STUDENT")
-    if cursor.fetchone()[0] == 0:
-        # Insert sample data
-        sample_data = [
-            ('Krish', 'Data Science', 'A', 90),
-            ('Sudhanshu', 'Data Science', 'B', 100),
-            ('Darius', 'Data Science', 'A', 86),
-            ('Vikash', 'DEVOPS', 'A', 50),
-            ('Dipesh', 'DEVOPS', 'A', 35)
-        ]
-        
-        cursor.executemany('INSERT INTO STUDENT VALUES (?,?,?,?)', sample_data)
+    for keyword in dangerous_keywords:
+        if keyword in sql_upper:
+            return False
     
-    conn.commit()
-    conn.close()
+    # Ensure it's a SELECT query
+    if not sql_upper.strip().startswith('SELECT'):
+        return False
+    
+    return True
